@@ -248,6 +248,22 @@ Error numbers in json formatted output as follow:
     -9003	mobileprovision file not found
     -9004	command 'security' not found!
     -9005	command 'codesign' not found!
+    -9006   command 'plutil' not found!
+    -9007   unable to parse specified .mobileprovision file
+    -9008   specified file is not a Distribution mobileprofile
+    -9009   mobileprovision is expired
+    -9010   certification file which maths the mobileprovision is not installed
+    -9011   make dir failed
+    -9012   write xcent file failed
+    -9013   unzip ipa failed
+    -9014   cant find Payload in ipa
+    -9015   cant find .app in Payload
+    -9016   cant find Info.plist
+    -9017   plutil failed
+    -9018   remove _CodeSignature failed
+    -9019   copy embedded.mobileprovision failed
+    -9020   codesign failed
+    -9021   generate resigned.ipa failed
 
 '''
 
