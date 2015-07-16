@@ -204,6 +204,7 @@ def do_resign(ipa_file, provision_file, dest_file):
 
     # zip to a ipa
     try:
+        os.chdir(zip_path)
         cmd = 'zip -r %s *' % dest_file
         os.popen(cmd).readlines()
     except Exception, e:
