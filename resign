@@ -48,18 +48,6 @@ VERSION_NUMBER = '1.0'
 
 
 def do_resign(ipa_file, provision_file, dest_file):
-    # save as xxx-resigned.ipa if dest_file is not specified
-    if dest_file is None or dest_file == '':
-        orig_path = os.path.dirname(ipa_file)
-        orig_name = os.path.basename(ipa_file)
-        regx = re.compile(r'(.*)(\.[a-zA-Z0-9]{2,16})$', re.I)
-        m = regx.match(orig_name)
-        if m is not None:
-            new_filename = '%s-resgin.ipa' % m.group(1)
-        else:
-            new_filename = '%s%s' % (orig_name, '-resigned.ipa')
-        dest_file = os.path.join(orig_path, new_filename)
-
     # check whether Distribution mobileprovision
     provision_xml_rx = re.compile(r'<\?xml.+</plist>', re.DOTALL)
     provision_fh = open(provision_file, 'rb')
@@ -286,6 +274,10 @@ Error numbers in json formatted output as follow:
 
 def print_and_close(code, message):
     print json.dumps({'code': code, 'message': message}, cls=MyJsonEncoder, indent=4)
+    try:
+        shutil.rmtree('/tmp/resign')
+    except:
+        pass
     exit( 0 if code == 0 else -1 )
 # end print_and_close
 
@@ -294,9 +286,9 @@ def main():
 
     # get command line arguments
     options = get_options()
-    ipa_file = options.ipa_file
+    ipa_file = os.path.abspath(options.ipa_file)
+    provision_file = os.path.abspath(options.provision_file)
     dest_file = options.dest_file
-    provision_file = options.provision_file
 
     errors = []
 
@@ -322,6 +314,22 @@ def main():
     retval = os.system('which plutil >/dev/null')
     if retval != 0:
         print_and_close(-9006, "command 'plutil' not found!")
+
+    # save as xxx-resigned.ipa if dest_file is not specified
+    if dest_file is None or dest_file == '':
+        orig_path = os.path.dirname(ipa_file)
+        orig_name = os.path.basename(ipa_file)
+        regx = re.compile(r'(.*)(\.[a-zA-Z0-9]{2,16})$', re.I)
+        m = regx.match(orig_name)
+        if m is not None:
+            new_filename = '%s-resgin.ipa' % m.group(1)
+        else:
+            new_filename = '%s%s' % (orig_name, '-resigned.ipa')
+        dest_file = os.path.join(orig_path, new_filename)
+    else:
+        dest_file = os.path.abspath(dest_file)
+
+
 
     do_resign(ipa_file, provision_file, dest_file)
 
