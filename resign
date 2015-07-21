@@ -162,12 +162,24 @@ def do_resign(ipa_file, provision_file, dest_file):
         print_and_close(-9015, 'cant find .app in Payload')
     ipa_app_path = os.path.join(ipa_app_path, ipa_app_name)
 
+    # check whether the executable is signed with a distribution profile
+    # try:
+    #     cmd = 'codesign -vv -d "%s"' % ipa_app_path
+    #     result_lines = execute_cmd(cmd)
+    #     regx = re.compile(r'^Authority=iPhone Distribution: (.*)[\r\n]*$')
+    #     for line in result_lines:
+    #         m = regx.match(line)
+    #         if m is not None:
+    #             print_and_close(-9022, 'the executable is signed with a distribution profile: %s' % m.group(1))
+    # except Exception, e:
+    #     pass
+
     # modify bundleid in Info.plist
     try:
         plist_fd = os.path.join(ipa_app_path, 'Info.plist')
         if not os.path.exists(plist_fd):
             print_and_close(-9016, 'cant find Info.plist')
-        cmd = 'plutil -replace CFBundleIdentifier -string cn.testin.inhouse.testapp %s' % plist_fd
+        cmd = 'plutil -replace CFBundleIdentifier -string cn.testin.inhouse.testapp "%s"' % plist_fd
         os.popen(cmd).readlines()
     except Exception, e:
         print_and_close(-9017, 'plutil failed: %s' % e.message)
@@ -194,11 +206,8 @@ def do_resign(ipa_file, provision_file, dest_file):
 
     # resign
     try:
-        cmd = 'codesign --force --sign %s --entitlements %s %s' % (signature, xcent_fd, ipa_app_path)
-        resign_process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        resign_process.stdout.readlines()
-        resign_process.stderr.readlines()
-        resign_process.kill()   #need to kill?
+        cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (signature, xcent_fd, ipa_app_path)
+        execute_cmd(cmd)
     except Exception, e:
         print_and_close(-9020, 'codesign failed: %s' % e.message)
 
@@ -212,6 +221,17 @@ def do_resign(ipa_file, provision_file, dest_file):
 
     print_and_close(0, 'resigned success and save ipa to %s' % dest_file)
 # end do_resign
+
+def execute_cmd(cmd):
+    result_lines = []
+    try:
+        cmd_process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        result_lines.extend(cmd_process.stdout.readlines())
+        result_lines.extend(cmd_process.stderr.readlines())
+        cmd_process.kill()   #need to kill?
+    except:
+        pass
+    return result_lines
 
 
 class MyJsonEncoder(json.JSONEncoder):
