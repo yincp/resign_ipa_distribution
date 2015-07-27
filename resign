@@ -211,6 +211,20 @@ def do_resign(ipa_file, provision_file, dest_file):
     except Exception, e:
         print_and_close(-9020, 'codesign failed: %s' % e.message)
 
+    # also resign the dylibs in .app/Frameworks/ directory
+    try:
+        swift_lib_in_app = os.path.join(ipa_app_path, 'Frameworks')
+        if os.path.exists(swift_lib_in_app) and os.path.isdir(swift_lib_in_app):
+            dylibs = os.listdir(swift_lib_in_app)
+            regx = re.compile(r'.*?\.dylib', re.I)
+            for dylib in dylibs:
+                if regx.match(dylib):
+                    dylib_path = os.path.join(swift_lib_in_app, dylib)
+                    cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (signature, xcent_fd, dylib_path)
+                    execute_cmd(cmd)
+    except:
+        pass
+
     # zip to a ipa
     try:
         os.chdir(zip_path)
