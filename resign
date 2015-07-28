@@ -357,7 +357,7 @@ def main():
         regx = re.compile(r'(.*)(\.[a-zA-Z0-9]{2,16})$', re.I)
         m = regx.match(orig_name)
         if m is not None:
-            new_filename = '%s-resign.ipa' % m.group(1)
+            new_filename = '%s-resigned.ipa' % m.group(1)
         else:
             new_filename = '%s%s' % (orig_name, '-resigned.ipa')
         dest_file = os.path.join(orig_path, new_filename)
