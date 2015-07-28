@@ -174,56 +174,51 @@ def do_resign(ipa_file, provision_file, dest_file):
     # except Exception, e:
     #     pass
 
-    # modify bundleid in Info.plist
-    try:
-        plist_fd = os.path.join(ipa_app_path, 'Info.plist')
-        if not os.path.exists(plist_fd):
-            print_and_close(-9016, 'cant find Info.plist')
-        cmd = 'plutil -replace CFBundleIdentifier -string %s "%s"' % (bundleid, plist_fd)
-        os.popen(cmd).readlines()
-    except Exception, e:
-        print_and_close(-9017, 'plutil failed: %s' % e.message)
 
-    # remove _CodeSignature directory
-    try:
-        sig_file_path = os.path.join(ipa_app_path, '_CodeSignature')
-        if os.path.exists(sig_file_path):
-            if os.path.isdir(sig_file_path):
-                shutil.rmtree(sig_file_path)
-            else:
-                os.remove(sig_file_path)
-    except Exception, e:
-        print_and_close(-9018, 'remove _CodeSignature failed: %s' % e.message)
-
-    # remove embedded.mobileprovision and copy our mobileprovision
-    try:
-        embedded_provision_fd = os.path.join(ipa_app_path, 'embedded.mobileprovision')
-        if os.path.exists(embedded_provision_fd):
-            os.remove(embedded_provision_fd)
-        shutil.copy(provision_file, embedded_provision_fd)
-    except Exception, e:
-        print_and_close(-9019, 'copy embedded.mobileprovision failed: %s' % e.message)
-
-    # resign
-    try:
-        cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (signature, xcent_fd, ipa_app_path)
-        execute_cmd(cmd)
-    except Exception, e:
-        print_and_close(-9020, 'codesign failed: %s' % e.message)
-
-    # also resign the dylibs in .app/Frameworks/ directory
+    # also resign the dylibs and frameworks in .app/Frameworks/ directory
     try:
         swift_lib_in_app = os.path.join(ipa_app_path, 'Frameworks')
         if os.path.exists(swift_lib_in_app) and os.path.isdir(swift_lib_in_app):
-            dylibs = os.listdir(swift_lib_in_app)
-            regx = re.compile(r'.*?\.(dylib|framework)', re.I)
-            for dylib in dylibs:
-                if regx.match(dylib):
-                    dylib_path = os.path.join(swift_lib_in_app, dylib)
-                    cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (signature, xcent_fd, dylib_path)
-                    execute_cmd(cmd)
+            # dylibs = os.listdir(swift_lib_in_app)
+            # regx = re.compile(r'.*?\.(dylib|framework)', re.I)
+            # for dylib in dylibs:
+            #     if regx.match(dylib):
+            #         dylib_path = os.path.join(swift_lib_in_app, dylib)
+            #         cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (signature, xcent_fd, dylib_path)
+            #         execute_cmd(cmd)
+            cmd = 'codesign --force --sign %s --entitlements "%s" "%s/*"' % (signature, xcent_fd, swift_lib_in_app)
+            execute_cmd(cmd)
     except:
         pass
+
+    # also resign appexs in .app/Plugins directory
+    try:
+        plugin_in_app = os.path.join(ipa_app_path, 'Plugins')
+        if os.path.exists(plugin_in_app) and os.path.isdir(plugin_in_app):
+            plugins = os.listdir(plugin_in_app)
+            regx = re.compile(r'.*?\.appex', re.I)
+            for plugin_name in plugins:
+                if regx.match(plugin_name):
+                    plugin_path = os.path.join(plugin_in_app, plugin_name)
+                    resign_app_path(plugin_path, bundleid, provision_file, signature, xcent_fd, 'appex')
+
+                    # check whether there is a app directory -- for watch kit app
+                    try:
+                        subs_in_plugin_path = os.listdir(plugin_path)
+                        regx2 = re.compile(r'.*?\.app', re.I)
+                        for sub_in_plugin in subs_in_plugin_path:
+                            if regx2.match(sub_in_plugin):
+                                wkapp_path = os.path.join(plugin_path, sub_in_plugin)
+                                resign_app_path(wkapp_path, bundleid, provision_file, signature, xcent_fd, 'wkapp')
+                    except Exception, e2:
+                        print_and_close(-9024, 'codesign watchkit app failed: %s' % e2.message)
+
+    except Exception, e:
+        print_and_close(-9023, 'codesign plugin failed: %s' % e.message)
+
+    # resign the main app
+    resign_app_path(ipa_app_path, bundleid, provision_file, signature, xcent_fd, 'app')
+
 
     # zip to a ipa
     try:
@@ -236,6 +231,70 @@ def do_resign(ipa_file, provision_file, dest_file):
     print_and_close(0, 'resigned success and save ipa to %s' % dest_file)
 # end do_resign
 
+def resign_app_path(app_path, app_bundle_id, provision_file, sign_signature, xcent_file, app_type):
+    bundle_id = app_bundle_id
+    if app_type == 'appex':
+        bundle_id = '%s.appex' % bundle_id
+    elif app_type == 'wkapp':
+        bundle_id = '%s.wkapp' % bundle_id
+
+    # modify bundleid in Info.plist
+    try:
+        plist_fd = os.path.join(app_path, 'Info.plist')
+        if not os.path.exists(plist_fd):
+            print_and_close(-9016, 'cant find Info.plist')
+        cmd = 'plutil -replace CFBundleIdentifier -string %s "%s"' % (bundle_id, plist_fd)
+        os.popen(cmd).readlines()
+
+        if app_type == 'wkapp':
+            cmd = 'plutil -replace WKCompanionAppBundleIdentifier -string %s "%s"' % (app_bundle_id, plist_fd)
+            os.popen(cmd).readlines()
+        elif app_type == 'appex':
+            plist_data = read_plist(plist_fd)
+            appex_whether_wkappex = False
+            if plist_data is not None:
+                if plist_data.has_key('NSExtension'):
+                    plist_extension = plist_data['NSExtension']
+                    if plist_extension is not None and plist_extension.has_key('NSExtensionPointIdentifier'):
+                        extension_type = plist_extension['NSExtensionPointIdentifier']
+                        if extension_type == 'com.apple.watchkit':
+                            appex_whether_wkappex = True
+            if appex_whether_wkappex:
+                cmd = 'plutil -replace NSExtension.NSExtensionAttributes.WKAppBundleIdentifier -string %s.wkapp "%s"' % (app_bundle_id, plist_fd)
+                os.popen(cmd).readlines()
+
+    except Exception, e:
+        print_and_close(-9017, 'plutil failed: %s' % e.message)
+
+
+    # remove _CodeSignature directory
+    try:
+        sig_file_path = os.path.join(app_path, '_CodeSignature')
+        if os.path.exists(sig_file_path):
+            if os.path.isdir(sig_file_path):
+                shutil.rmtree(sig_file_path)
+            else:
+                os.remove(sig_file_path)
+    except Exception, e:
+        print_and_close(-9018, 'remove _CodeSignature failed: %s' % e.message)
+
+    # remove embedded.mobileprovision and copy our mobileprovision
+    try:
+        embedded_provision_fd = os.path.join(app_path, 'embedded.mobileprovision')
+        if os.path.exists(embedded_provision_fd):
+            os.remove(embedded_provision_fd)
+        shutil.copy(provision_file, embedded_provision_fd)
+    except Exception, e:
+        print_and_close(-9019, 'copy embedded.mobileprovision failed: %s' % e.message)
+
+    # resign
+    try:
+        cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (sign_signature, xcent_file, app_path)
+        execute_cmd(cmd)
+    except Exception, e:
+        print_and_close(-9020, 'codesign failed: %s' % e.message)
+# end resign_app_path
+
 def execute_cmd(cmd):
     result_lines = []
     try:
@@ -246,6 +305,29 @@ def execute_cmd(cmd):
     except:
         pass
     return result_lines
+
+def read_plist(plist_file):
+    try:
+        f = open(plist_file, 'r')
+        content = f.read(1024)
+        f.close()
+        xml_rx = re.compile(r'<\??xml')
+        if xml_rx.match(content):
+            return plistlib.readPlistFromString(content)
+        else:
+            new_xml_plist = '%s.xml' % os.path.basename(plist_file)
+            new_xml_plist = os.path.join('/tmp/resign', new_xml_plist)
+            if os.path.exists(new_xml_plist):
+                os.remove(new_xml_plist)
+            shutil.copy(plist_file, new_xml_plist)
+            cmd = 'plutil -convert xml1 "%s"' % new_xml_plist
+            os.system(cmd)
+            return plistlib.readPlist(new_xml_plist)
+    except:
+        pass
+
+    return None
+# end read_plist
 
 
 class MyJsonEncoder(json.JSONEncoder):
@@ -287,7 +369,9 @@ Error numbers in json formatted output as follow:
     -9019   copy embedded.mobileprovision failed
     -9020   codesign failed
     -9021   generate resigned.ipa failed
-
+    -9022   the executable is signed with a distribution profile
+    -9023   codesign plugin failed
+    -9024   codesign watchkit app failed
 '''
 
     version_info = 'resign: version %s' % (VERSION_NUMBER)
