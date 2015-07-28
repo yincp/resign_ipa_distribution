@@ -216,7 +216,7 @@ def do_resign(ipa_file, provision_file, dest_file):
         swift_lib_in_app = os.path.join(ipa_app_path, 'Frameworks')
         if os.path.exists(swift_lib_in_app) and os.path.isdir(swift_lib_in_app):
             dylibs = os.listdir(swift_lib_in_app)
-            regx = re.compile(r'.*?\.dylib', re.I)
+            regx = re.compile(r'.*?\.(dylib|framework)', re.I)
             for dylib in dylibs:
                 if regx.match(dylib):
                     dylib_path = os.path.join(swift_lib_in_app, dylib)
@@ -357,7 +357,7 @@ def main():
         regx = re.compile(r'(.*)(\.[a-zA-Z0-9]{2,16})$', re.I)
         m = regx.match(orig_name)
         if m is not None:
-            new_filename = '%s-resgin.ipa' % m.group(1)
+            new_filename = '%s-resign.ipa' % m.group(1)
         else:
             new_filename = '%s%s' % (orig_name, '-resigned.ipa')
         dest_file = os.path.join(orig_path, new_filename)
