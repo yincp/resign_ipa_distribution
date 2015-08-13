@@ -132,8 +132,21 @@ def do_resign(ipa_file, provision_file, dest_file):
     cmd = ''
     try:
         os.makedirs(zip_path)
-        cmd = 'unzip %s -d %s' % (ipa_file, zip_path)
-        os.popen(cmd).readlines()
+        # cmd = 'unzip %s -d %s' % (ipa_file, zip_path)
+        # os.popen(cmd).readlines()
+        zip_obj = zipfile.ZipFile(ipa_file, 'r')
+        for name in zip_obj.namelist():
+            sub_path_name = os.path.dirname(name)
+            desc_path_name = os.path.join(zip_path, sub_path_name)
+            desc_name = os.path.join(zip_path, name)
+            if not os.path.exists(desc_path_name):
+                os.makedirs(desc_path_name)
+            data = zip_obj.read(name)
+            if not os.path.exists(desc_name):
+                fo = open(desc_name, 'w')
+                fo.write(data)
+                fo.close()
+        zip_obj.close()
     except Exception, e:
         print_and_close(-9013, 'unzip ipa failed: %s' % e.message)
     # check if Payload is not found
