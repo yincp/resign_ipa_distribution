@@ -94,9 +94,9 @@ def do_resign(ipa_file, provision_file, dest_file):
         print_and_close(-9011, 'make dir failed: %s' % e.message)
 
     # generate xcent file using bundleid and teamid in provision
-    teamid = provision_data['TeamIdentifier'][0]
-    bundleid = provision_data['Entitlements']['application-identifier']
-    bundleid = re.sub(r'%s\.' % teamid, '', bundleid)
+    team_id = provision_data['TeamIdentifier'][0]
+    bundle_id = provision_data['Entitlements']['application-identifier']
+    bundle_id = re.sub(r'%s\.' % team_id, '', bundle_id)
     xcent_xml_body = '''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -114,8 +114,8 @@ def do_resign(ipa_file, provision_file, dest_file):
 </dict>
 </plist>
 '''
-    xcent_xml_body = xcent_xml_body % (teamid, bundleid, teamid, teamid, bundleid)
-    xcent_fd = os.path.join(work_path, '%s.xcent' % bundleid)
+    xcent_xml_body = xcent_xml_body % (team_id, bundle_id, team_id, team_id, bundle_id)
+    xcent_fd = os.path.join(work_path, '%s.xcent' % bundle_id)
     try:
         if os.path.exists(xcent_fd):
             os.remove(xcent_fd)
@@ -211,7 +211,19 @@ def do_resign(ipa_file, provision_file, dest_file):
             for plugin_name in plugins:
                 if regx.match(plugin_name):
                     plugin_path = os.path.join(plugin_in_app, plugin_name)
-                    resign_app_path(plugin_path, bundleid, provision_file, signature, xcent_fd, 'appex')
+                    plugin_bundle_id = None
+
+                    # read bundle id from Info.plist
+                    plist_fd = os.path.join(plugin_path, 'Info.plist')
+                    if not os.path.exists(plist_fd):
+                        continue
+                    plist_data = read_plist(plist_fd)
+                    if plist_data is not None:
+                        if plist_data.has_key('CFBundleIdentifier'):
+                            plugin_bundle_id = plist_data['CFBundleIdentifier']
+                    if plugin_bundle_id is None:
+                        continue
+                    plugin_bundle_id = '%s.%s' % (bundle_id, plugin_bundle_id)
 
                     # check whether there is a app directory -- for watch kit app
                     try:
@@ -220,15 +232,17 @@ def do_resign(ipa_file, provision_file, dest_file):
                         for sub_in_plugin in subs_in_plugin_path:
                             if regx2.match(sub_in_plugin):
                                 wkapp_path = os.path.join(plugin_path, sub_in_plugin)
-                                resign_app_path(wkapp_path, bundleid, provision_file, signature, xcent_fd, 'wkapp')
+                                resign_app_path(wkapp_path, plugin_bundle_id, provision_file, signature, xcent_fd, 'wkapp')
                     except Exception, e2:
                         print_and_close(-9024, 'codesign watchkit app failed: %s' % e2.message)
 
+
+                    resign_app_path(plugin_path, plugin_bundle_id, provision_file, signature, xcent_fd, 'appex')
     except Exception, e:
         print_and_close(-9023, 'codesign plugin failed: %s' % e.message)
 
     # resign the main app
-    resign_app_path(ipa_app_path, bundleid, provision_file, signature, xcent_fd, 'app')
+    resign_app_path(ipa_app_path, bundle_id, provision_file, signature, xcent_fd, 'app')
 
 
     # zip to a ipa
@@ -244,9 +258,7 @@ def do_resign(ipa_file, provision_file, dest_file):
 
 def resign_app_path(app_path, app_bundle_id, provision_file, sign_signature, xcent_file, app_type):
     bundle_id = app_bundle_id
-    if app_type == 'appex':
-        bundle_id = '%s.appex' % bundle_id
-    elif app_type == 'wkapp':
+    if app_type == 'wkapp':
         bundle_id = '%s.wkapp' % bundle_id
 
     # modify bundleid in Info.plist
