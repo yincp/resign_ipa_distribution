@@ -68,6 +68,15 @@ def do_resign(ipa_file, provision_file, dest_file):
         days_until_expire = difference_date.days + 1
         if days_until_expire <= 0:
             print_and_close(-9009, 'mobileprovision is expired')
+    # group_id
+    group_id = None
+    if ('Entitlements' in provision_data):
+        entitlement_data = provision_data['Entitlements']
+        if entitlement_data is not None and 'com.apple.security.application-groups' in entitlement_data:
+            group_array = entitlement_data['com.apple.security.application-groups']
+            if len(group_array) > 0:
+                group_id = group_array[0]
+
 
     # check teamname certification is installed and get signature
     result_lines = os.popen('security find-identity -vv -p codesigning').readlines()
@@ -97,6 +106,8 @@ def do_resign(ipa_file, provision_file, dest_file):
     team_id = provision_data['TeamIdentifier'][0]
     bundle_id = provision_data['Entitlements']['application-identifier']
     bundle_id = re.sub(r'%s\.' % team_id, '', bundle_id)
+    if group_id is None:
+        group_id = 'group.%s' % bundle_id
     xcent_xml_body = '''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -111,10 +122,14 @@ def do_resign(ipa_file, provision_file, dest_file):
 	<array>
 		<string>%s.%s</string>
 	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>%s</string>
+	</array>
 </dict>
 </plist>
 '''
-    xcent_xml_body = xcent_xml_body % (team_id, bundle_id, team_id, team_id, bundle_id)
+    xcent_xml_body = xcent_xml_body % (team_id, bundle_id, team_id, team_id, bundle_id, group_id)
     xcent_fd = os.path.join(work_path, '%s.xcent' % bundle_id)
     try:
         if os.path.exists(xcent_fd):
@@ -245,17 +260,17 @@ def do_resign(ipa_file, provision_file, dest_file):
                         for sub_in_plugin in subs_in_plugin_path:
                             if regx2.match(sub_in_plugin):
                                 wkapp_path = os.path.join(plugin_path, sub_in_plugin)
-                                resign_app_path(wkapp_path, plugin_bundle_id, provision_file, signature, xcent_fd, 'wkapp')
+                                resign_app_path(wkapp_path, group_id, plugin_bundle_id, provision_file, signature, xcent_fd, 'wkapp')
                     except Exception, e2:
                         print_and_close(-9024, 'codesign watchkit app failed: %s' % e2.message)
 
 
-                    resign_app_path(plugin_path, plugin_bundle_id, provision_file, signature, xcent_fd, 'appex')
+                    resign_app_path(plugin_path, group_id, plugin_bundle_id, provision_file, signature, xcent_fd, 'appex')
     except Exception, e:
         print_and_close(-9023, 'codesign plugin failed: %s' % e.message)
 
     # resign the main app
-    resign_app_path(ipa_app_path, bundle_id, provision_file, signature, xcent_fd, 'app')
+    resign_app_path(ipa_app_path, group_id, bundle_id, provision_file, signature, xcent_fd, 'app')
 
 
     # zip to a ipa
@@ -269,10 +284,14 @@ def do_resign(ipa_file, provision_file, dest_file):
     print_and_close(0, 'resigned success and save ipa to %s' % dest_file)
 # end do_resign
 
-def resign_app_path(app_path, app_bundle_id, provision_file, sign_signature, xcent_file, app_type):
+def resign_app_path(app_path, group_id, app_bundle_id, provision_file, sign_signature, xcent_file, app_type):
     bundle_id = app_bundle_id
     if app_type == 'wkapp':
         bundle_id = '%s.wkapp' % bundle_id
+
+    # modify archived-expanded-entitlements.xcent
+    archived_xcent_fd = os.path.join(app_path, 'archived-expanded-entitlements.xcent')
+    modify_archived_expanded_entitlement(archived_xcent_fd, group_id)
 
     # modify bundleid in Info.plist
     try:
@@ -330,6 +349,25 @@ def resign_app_path(app_path, app_bundle_id, provision_file, sign_signature, xce
     except Exception, e:
         print_and_close(-9020, 'codesign failed: %s' % e.message)
 # end resign_app_path
+
+def modify_archived_expanded_entitlement(xcent_fd, group_id):
+    if os.path.exists(xcent_fd):
+        xcent_xml_rx = re.compile(r'<\?xml.+</plist>', re.DOTALL)
+        xcent_fh = open(xcent_fd, 'rb')
+        content = xcent_fh.read()
+        match = xcent_xml_rx.search(content)
+        if (match is not None):
+            xcent_xml_content = match.group()
+            xcent_data = plistlib.readPlistFromString(xcent_xml_content)
+        xcent_fh.close()
+
+        xcent_data['com.apple.security.application-groups'] = [group_id]
+        plistlib.writePlist(xcent_data, xcent_fd)
+    else:
+        xcent_data = {'com.apple.security.application-groups': [group_id]}
+        plistlib.writePlist(xcent_data, xcent_fd)
+
+# end modify xcent
 
 def execute_cmd(cmd):
     result_lines = []
