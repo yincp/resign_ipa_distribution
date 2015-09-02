@@ -126,6 +126,10 @@ def do_resign(ipa_file, provision_file, dest_file):
 	<array>
 		<string>%s</string>
 	</array>
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.homekit</key>
+	<true/>
 </dict>
 </plist>
 '''
