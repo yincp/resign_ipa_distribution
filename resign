@@ -349,7 +349,10 @@ def resign_app_path(app_path, group_id, app_bundle_id, provision_file, sign_sign
     # resign
     try:
         cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (sign_signature, xcent_file, app_path)
-        execute_cmd(cmd)
+        lines = execute_cmd(cmd)
+        for line in lines:
+            if 'Agreeing to the Xcode/iOS license requires admin privileges' in line or 'the codesign_allocate helper tool cannot be found or used' in line:
+                print_and_close(-9020, 'codesign failed: %s' % line)
     except Exception, e:
         print_and_close(-9020, 'codesign failed: %s' % e.message)
 # end resign_app_path
@@ -503,11 +506,10 @@ def main():
     retval = os.system('which security >/dev/null')
     if retval != 0:
         print_and_close(-9004, "command 'security' not found!")
-    # check whether security is installed.
     retval = os.system('which codesign >/dev/null')
     if retval != 0:
         print_and_close(-9005, "command 'codesign' not found!")
-    # check whether security is installed.
+    # check whether plutil is installed.
     retval = os.system('which plutil >/dev/null')
     if retval != 0:
         print_and_close(-9006, "command 'plutil' not found!")
