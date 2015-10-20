@@ -155,6 +155,10 @@ def do_resign(ipa_file, provision_file, dest_file):
         # os.popen(cmd).readlines()
         zip_obj = zipfile.ZipFile(ipa_file, 'r')
         for name in zip_obj.namelist():
+
+            if name.endswith('S500.flv'):
+                pass
+
             sub_path_name = os.path.dirname(name)
             desc_path_name = os.path.join(zip_path, sub_path_name)
             desc_name = os.path.join(zip_path, name)
@@ -255,7 +259,11 @@ def do_resign(ipa_file, provision_file, dest_file):
                             plugin_bundle_id = plist_data['CFBundleIdentifier']
                     if plugin_bundle_id is None:
                         continue
-                    plugin_bundle_id = '%s.%s' % (bundle_id, plugin_bundle_id)
+
+                    if plugin_bundle_id.endswith('.watchkitextension'):
+                        plugin_bundle_id = '%s.watchkitextension' % (bundle_id)
+                    else:
+                        plugin_bundle_id = '%s.%s' % (bundle_id, plugin_bundle_id)
 
                     # check whether there is a app directory -- for watch kit app
                     try:
@@ -264,17 +272,17 @@ def do_resign(ipa_file, provision_file, dest_file):
                         for sub_in_plugin in subs_in_plugin_path:
                             if regx2.match(sub_in_plugin):
                                 wkapp_path = os.path.join(plugin_path, sub_in_plugin)
-                                resign_app_path(wkapp_path, group_id, plugin_bundle_id, provision_file, signature, xcent_fd, 'wkapp')
+                                resign_app_path(wkapp_path, group_id, bundle_id, plugin_bundle_id, provision_file, signature, xcent_fd, 'wkapp')
                     except Exception, e2:
                         print_and_close(-9024, 'codesign watchkit app failed: %s' % e2.message)
 
 
-                    resign_app_path(plugin_path, group_id, plugin_bundle_id, provision_file, signature, xcent_fd, 'appex')
+                    resign_app_path(plugin_path, group_id, bundle_id, plugin_bundle_id, provision_file, signature, xcent_fd, 'appex')
     except Exception, e:
         print_and_close(-9023, 'codesign plugin failed: %s' % e.message)
 
     # resign the main app
-    resign_app_path(ipa_app_path, group_id, bundle_id, provision_file, signature, xcent_fd, 'app')
+    resign_app_path(ipa_app_path, group_id, bundle_id, bundle_id, provision_file, signature, xcent_fd, 'app')
 
 
     # zip to a ipa
@@ -288,10 +296,10 @@ def do_resign(ipa_file, provision_file, dest_file):
     print_and_close(0, 'resigned success and save ipa to %s' % dest_file)
 # end do_resign
 
-def resign_app_path(app_path, group_id, app_bundle_id, provision_file, sign_signature, xcent_file, app_type):
+def resign_app_path(app_path, group_id, root_bundle_id, app_bundle_id, provision_file, sign_signature, xcent_file, app_type):
     bundle_id = app_bundle_id
     if app_type == 'wkapp':
-        bundle_id = '%s.wkapp' % bundle_id
+        bundle_id = '%s.watchkitapp' % bundle_id
 
     # modify archived-expanded-entitlements.xcent
     archived_xcent_fd = os.path.join(app_path, 'archived-expanded-entitlements.xcent')
@@ -306,7 +314,7 @@ def resign_app_path(app_path, group_id, app_bundle_id, provision_file, sign_sign
         os.popen(cmd).readlines()
 
         if app_type == 'wkapp':
-            cmd = 'plutil -replace WKCompanionAppBundleIdentifier -string %s "%s"' % (app_bundle_id, plist_fd)
+            cmd = 'plutil -replace WKCompanionAppBundleIdentifier -string %s "%s"' % (root_bundle_id, plist_fd)
             os.popen(cmd).readlines()
         elif app_type == 'appex':
             plist_data = read_plist(plist_fd)
@@ -319,7 +327,7 @@ def resign_app_path(app_path, group_id, app_bundle_id, provision_file, sign_sign
                         if extension_type == 'com.apple.watchkit':
                             appex_whether_wkappex = True
             if appex_whether_wkappex:
-                cmd = 'plutil -replace NSExtension.NSExtensionAttributes.WKAppBundleIdentifier -string %s.wkapp "%s"' % (app_bundle_id, plist_fd)
+                cmd = 'plutil -replace NSExtension.NSExtensionAttributes.WKAppBundleIdentifier -string %s.watchkitapp "%s"' % (app_bundle_id, plist_fd)
                 os.popen(cmd).readlines()
 
     except Exception, e:
