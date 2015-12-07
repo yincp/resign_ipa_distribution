@@ -358,9 +358,19 @@ def resign_app_path(app_path, group_id, root_bundle_id, app_bundle_id, provision
     try:
         cmd = 'codesign --force --sign %s --entitlements "%s" "%s"' % (sign_signature, xcent_file, app_path)
         lines = execute_cmd(cmd)
+        codesign_success = True
+        fail_lines = None
         for line in lines:
-            if 'Agreeing to the Xcode/iOS license requires admin privileges' in line or 'the codesign_allocate helper tool cannot be found or used' in line:
-                print_and_close(-9020, 'codesign failed: %s' % line)
+            if 'Agreeing to the Xcode/iOS license requires admin privileges' in line or 'the codesign_allocate helper tool cannot be found or used' in line or 'fatal error:' in line:
+                codesign_success = False
+                fail_lines = lines
+                break
+        if not codesign_success:
+            cmd = '%s -a armv7' % cmd
+            lines = execute_cmd(cmd)
+            for line in lines:
+                if 'Agreeing to the Xcode/iOS license requires admin privileges' in line or 'the codesign_allocate helper tool cannot be found or used' in line or 'fatal error:' in line:
+                    print_and_close(-9020, 'codesign failed: %s' % ''.join(fail_lines))
     except Exception, e:
         print_and_close(-9020, 'codesign failed: %s' % e.message)
 # end resign_app_path
